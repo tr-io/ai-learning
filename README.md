@@ -6,6 +6,8 @@ This repo is for self-learning AI material regarding reinforcement learning and 
 * [Python 3.5+](https://www.python.org/downloads/)
 * [Docker\*](https://www.docker.com/products/docker-desktop)
 * [Jupyter\*](https://jupyter.org/install)
+* [Numpy](https://numpy.org/)
+* [Pandas](https://pandas.pydata.org/)
 
 
 \* **Jupyter** and **Docker** are not dependencies/required as of **04/02/20**.
