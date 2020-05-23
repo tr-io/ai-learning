@@ -75,22 +75,23 @@ class NeuralNetwork:
 # doing a neural net from scratch is hard lmfao
 def gen_model(i_size, h_size, o_size):
     return torch.nn.Sequential(
-        torch.nn.Linear(i_size, h_size),
-        torch.nn.ReLU(),
-        torch.nn.Linear(h_size, o_size),
-        torch.nn.Sigmoid()
+        torch.nn.Linear(i_size, h_size).cuda(),
+        torch.nn.ReLU().cuda(),
+        torch.nn.Linear(h_size, o_size).cuda(),
+        torch.nn.Sigmoid().cuda()
     )
 
 # Helper function to calculate the fitness function of an individual agent
 def run_agent(model, eps=500, render=False):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     env = gym.make('BipedalWalker-v3')
     obs = env.reset()
     fitness = 0.0
     for _ in range(eps):
         if render:
             env.render()
-        obs = torch.from_numpy(obs).float()
-        action = model(obs).detach().numpy()
+        obs = torch.from_numpy(obs).float().to(device)
+        action = (model(obs).detach()).cpu().numpy()
         obs, reward, done, info = env.step(action)
         fitness += reward
         if done:
@@ -118,7 +119,7 @@ class WalkerAgent:
         self.output_size = 4
 
         # instantiate new neural net for the walker
-        self.model = gen_model(self.input_size, self.hidden_size, self.output_size)
+        self.model = gen_model(self.input_size, self.hidden_size, self.output_size).cuda()
 
         # reward/fitness
         self.fitness = 0.0
@@ -147,7 +148,7 @@ def crossover(child1_weights, child2_weights):
     return child1_copied_weights, child2_copied_weights
 
 # mutation function
-def mutate(parent_weights, p=0.3):
+def mutate(parent_weights, p=0.6):
     child_weights = parent_weights.clone()
     if np.random.rand() < p:
         cross_point = np.random.randint(0, parent_weights.shape[0])
@@ -171,6 +172,7 @@ def weights_to_statedict(model_dict, model_weights) -> OrderedDict:
     return state_dict
 
 def run_video_agent(model, eps=500):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     env = gym.make('BipedalWalker-v3')
     env = Monitor(env, './vid', video_callable=lambda episode_id: True, force=True)
     obs = env.reset()
@@ -181,8 +183,8 @@ def run_video_agent(model, eps=500):
     for _ in range(eps):
         env.render()
 
-        obs = torch.from_numpy(obs).float()
-        action = model(obs).detach().numpy()
+        obs = torch.from_numpy(obs).float().to(device)
+        action = (model(obs).detach()).cpu().numpy()
         new_obs, reward, done, info = env.step(action)
         fitness += reward
         obs = new_obs
@@ -248,58 +250,70 @@ def GeneticAlgorithm(pop, top_limit, gen):
         # "Crossover is sexual reproduction" (GeeksForGeeks)
         # from now on i require anyone who reads this and wants to have kids
         # to say "ayy bby lets do some crossover ;)"
+        # parent selection: https://www.tutorialspoint.com/genetic_algorithms/genetic_algorithms_parent_selection.htm
+        # roulette wheel selection
+        sum_fit = abs(sum(x.fitness for x in sorted_pop))
         print("Crossover time...")
         new_pop = []
-        for i in range(0, len(sorted_pop)):
-            if len(new_pop) >= (len(population) - 1):
-                    break
+        for i in range(0, len(population) - 1):
+            # roulette selection:
+            # pick random number between 0 and sum_fit
+            # for parent 1 (parent a)
+            pa_fit = random.uniform(0.0, sum_fit)
+            pb_fit = random.uniform(0.0, sum_fit)
+
+            pa_sum = 0.0
+            pb_sum = 0.0
+            parent1 = None
+            parent2 = None
             for j in range(0, len(sorted_pop)):
-                # dont breed with itself cause thats illegal
-                if i == j:
-                    print("i: ", i, " j: ", j)
-                    continue
+                pa_sum += abs(sorted_pop[j].fitness)
+                pb_sum += abs(sorted_pop[j].fitness)
+                if pa_sum >= pa_fit:
+                    parent1 = sorted_pop[j]
+                if pb_sum >= pb_fit:
+                    parent2 = sorted_pop[j]
 
-                print("Breeding parent ", i, " with parent ", j)
+            print("pa_fit, pb_fit: ", pa_fit, ", ", pb_fit)
+            print("pa_sum, pb_sum: ", pa_sum, ", ", pb_sum)
+            print("Selected parents: ", parent1, " and ", parent2)
 
-                parent1 = sorted_pop[i]
-                parent2 = sorted_pop[j]
+            child1 = copy.deepcopy(parent1)
+            child2 = copy.deepcopy(parent2)
 
-                child1 = copy.deepcopy(parent1)
-                child2 = copy.deepcopy(parent2)
+            print("Crossing over weights...")
+            child1.weights, child2.weights = crossover(parent1.weights, parent2.weights)
 
-                print("Crossing over weights...")
-                child1.weights, child2.weights = crossover(parent1.weights, parent2.weights)
+            # mutation step
+            # mutation by normal distribution
+            print("Mutation chance...")
+            child1.weights = mutate(child1.weights)
+            child2.weights = mutate(child2.weights)
 
-                # mutation step
-                # mutation by normal distribution
-                print("Mutation chance...")
-                child1.weights = mutate(child1.weights)
-                child2.weights = mutate(child2.weights)
+            # Update the weights
+            print("Updating weights...")
+            child1.update_model()
+            child2.update_model()
 
-                # Update the weights
-                print("Updating weights...")
-                child1.update_model()
-                child2.update_model()
+            # add it to new_pop, but add the higher scoring one first
+            print("Adding children to new population...")
+            child1.calculate_fitness()
+            child2.calculate_fitness()
 
-                # add it to new_pop, but add the higher scoring one first
-                print("Adding children to new population...")
-                child1.calculate_fitness()
-                child2.calculate_fitness()
+            child1_added = False
+            if child1.fitness > child2.fitness:
+                child1_added = True
+                new_pop.append(child1)
+            else:
+                new_pop.append(child2)
 
-                child1_added = False
-                if child1.fitness > child2.fitness:
-                    child1_added = True
-                    new_pop.append(child1)
-                else:
-                    new_pop.append(child2)
+            if len(new_pop) >= (len(population) - 1):
+                break
 
-                if len(new_pop) >= (len(population) - 1):
-                    break
-
-                if child1_added:
-                    new_pop.append(child2)
-                else:
-                    new_pop.append(child1)
+            if child1_added:
+                new_pop.append(child2)
+            else:
+                new_pop.append(child1)
         
         # add best scoring agent to the new pop
         new_pop.append(sorted_pop[0])
@@ -315,9 +329,9 @@ def GeneticAlgorithm(pop, top_limit, gen):
 
 # Main function for testing
 def main():
-    pop = 500
+    pop = 100
     top_limit = 20
-    eps = 500
+    eps = 3
     #trials = 4
 
     """
