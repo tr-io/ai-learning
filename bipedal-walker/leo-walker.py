@@ -236,11 +236,6 @@ def GeneticAlgorithm(pop, top_limit, gen):
         sorted_pop = sorted(population, key=lambda x: x.fitness, reverse=True) # sort in desc order
         sorted_pop = sorted_pop[:top_limit] # get top_limit # of top scoring individuals
 
-        print("\n")
-        print("Best scores")
-        for x in range(0, len(sorted_pop)):
-            print("top ", (x + 1), " score: ", sorted_pop[x].fitness)
-
         # TODO: might add some random shuffling that way genetics is even more shuffled
         # right now its more like eugenics to get fastest and bestest children quickly
         # i think shuffling would slow it down tho
@@ -273,10 +268,6 @@ def GeneticAlgorithm(pop, top_limit, gen):
                     parent1 = sorted_pop[j]
                 if pb_sum >= pb_fit:
                     parent2 = sorted_pop[j]
-
-            print("pa_fit, pb_fit: ", pa_fit, ", ", pb_fit)
-            print("pa_sum, pb_sum: ", pa_sum, ", ", pb_sum)
-            print("Selected parents: ", parent1, " and ", parent2)
 
             child1 = copy.deepcopy(parent1)
             child2 = copy.deepcopy(parent2)
@@ -329,9 +320,9 @@ def GeneticAlgorithm(pop, top_limit, gen):
 
 # Main function for testing
 def main():
-    pop = 100
+    pop = 500
     top_limit = 20
-    eps = 3
+    eps = 500
     #trials = 4
 
     """
